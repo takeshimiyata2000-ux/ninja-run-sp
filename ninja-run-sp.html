@@ -41,15 +41,15 @@
   #controls { position: absolute; inset: 0; pointer-events: none; }
   .ctl {
     position: absolute; pointer-events: auto; border-radius: 50%;
-    border: 3px solid rgba(21,54,92,.5); background: rgba(255,255,255,.4);
+    border: 2px solid rgba(21,54,92,.28); background: rgba(255,255,255,.16);
     display: flex; align-items: center; justify-content: center;
-    color: #15365c; font-weight: 900; backdrop-filter: blur(2px);
+    color: rgba(21,54,92,.62); font-weight: 900; backdrop-filter: blur(1px);
     transition: background .06s, transform .06s; touch-action: none;
     transform: translate(-50%, -50%);  /* left/top で中心を指定する */
   }
-  .ctl.pressed { background: rgba(255,213,107,.8); transform: translate(-50%, -50%) scale(.93); }
-  #btnJ.rescue { background: rgba(120,200,255,.85); border-color: #1f6fb0; box-shadow: 0 0 18px rgba(80,180,255,.9); }
-  .ctl svg { width: 46%; height: 46%; fill: #15365c; }
+  .ctl.pressed { background: rgba(255,213,107,.55); transform: translate(-50%, -50%) scale(.93); }
+  #btnJ.rescue { background: rgba(120,200,255,.5); border-color: rgba(31,111,176,.6); box-shadow: 0 0 16px rgba(80,180,255,.7); }
+  .ctl svg { width: 46%; height: 46%; fill: rgba(21,54,92,.6); }
   /* サイズのみ CSS で指定（位置は JS が中心座標で配置する） */
   #btnL, #btnR { width: 82px; height: 82px; }
   #btnJ { width: 100px; height: 100px; font-size: 20px; }
