@@ -45,20 +45,46 @@
     display: flex; align-items: center; justify-content: center;
     color: #15365c; font-weight: 900; backdrop-filter: blur(2px);
     transition: background .06s, transform .06s; touch-action: none;
+    transform: translate(-50%, -50%);  /* left/top で中心を指定する */
   }
-  .ctl.pressed { background: rgba(255,213,107,.8); transform: scale(.93); }
+  .ctl.pressed { background: rgba(255,213,107,.8); transform: translate(-50%, -50%) scale(.93); }
   #btnJ.rescue { background: rgba(120,200,255,.85); border-color: #1f6fb0; box-shadow: 0 0 18px rgba(80,180,255,.9); }
   .ctl svg { width: 46%; height: 46%; fill: #15365c; }
-  #btnL { left: max(16px, env(safe-area-inset-left)); bottom: max(18px, env(safe-area-inset-bottom)); width: 82px; height: 82px; }
-  #btnR { left: calc(max(16px, env(safe-area-inset-left)) + 96px); bottom: max(18px, env(safe-area-inset-bottom)); width: 82px; height: 82px; }
-  #btnJ { right: max(16px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: 100px; height: 100px; font-size: 20px; }
-  #btnT { right: calc(max(16px, env(safe-area-inset-right)) + 114px); bottom: max(26px, env(safe-area-inset-bottom)); width: 74px; height: 74px; font-size: 15px; }
+  /* サイズのみ CSS で指定（位置は JS が中心座標で配置する） */
+  #btnL, #btnR { width: 82px; height: 82px; }
+  #btnJ { width: 100px; height: 100px; font-size: 20px; }
+  #btnT { width: 74px; height: 74px; font-size: 15px; }
   @media (max-height: 450px) {
     #btnL, #btnR { width: 68px; height: 68px; }
-    #btnR { left: calc(max(16px, env(safe-area-inset-left)) + 80px); }
     #btnJ { width: 84px; height: 84px; }
-    #btnT { width: 62px; height: 62px; right: calc(max(16px, env(safe-area-inset-right)) + 96px); }
+    #btnT { width: 62px; height: 62px; }
   }
+  /* 配置カスタム中の表示 */
+  #controls.editing .ctl { outline: 3px dashed #b8651b; outline-offset: 3px; opacity: .96; }
+  #editBar {
+    position: absolute; top: max(52px, calc(env(safe-area-inset-top) + 44px)); left: 50%;
+    transform: translateX(-50%); z-index: 30;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: rgba(255,255,255,.92); border: 2px solid #b8651b; border-radius: 14px;
+    padding: 12px 18px; box-shadow: 0 6px 20px rgba(0,0,0,.25); pointer-events: auto;
+    max-width: 84vw; text-align: center;
+  }
+  #editBar .tt { font-size: 14px; font-weight: 800; color: #15365c; line-height: 1.5; }
+  #editBar .row { display: flex; gap: 10px; }
+  #editBar button {
+    pointer-events: auto; padding: 10px 22px; border-radius: 999px; border: none;
+    font-family: inherit; font-size: 15px; font-weight: 900; cursor: pointer;
+  }
+  #editReset { background: rgba(21,54,92,.12); color: #15365c; }
+  #editDone { background: linear-gradient(180deg, #ff9d4d, #e8632a); color: #fff; box-shadow: 0 4px 0 #b8651b; }
+  #editDone:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8651b; }
+  #editPadBtn, #toTopBtn {
+    margin-top: 2px; padding: 9px 20px; border-radius: 999px;
+    border: 2px solid rgba(21,54,92,.3); background: rgba(255,255,255,.6);
+    font-family: inherit; font-size: 14px; font-weight: 800; color: #15365c;
+    cursor: pointer; pointer-events: auto;
+  }
+  #editPadBtn:active, #toTopBtn:active { transform: translateY(1px); }
 
   /* overlays */
   .screen {
@@ -125,6 +151,14 @@
     <div class="ctl" id="btnJ">跳</div>
   </div>
 
+  <div id="editBar" class="hidden">
+    <div class="tt">ボタンをドラッグして好きな位置へ動かせます</div>
+    <div class="row">
+      <button id="editReset">リセット</button>
+      <button id="editDone">完了</button>
+    </div>
+  </div>
+
   <div id="startScreen" class="screen">
     <div class="title">天晴忍法帖</div>
     <div class="subtitle">S M A R T P H O N E</div>
@@ -142,6 +176,7 @@
     </div>
     <div class="best">ハイスコア &nbsp;<span id="bestStart">0</span> &nbsp;pts</div>
     <button class="btn" id="startBtn">スタート</button>
+    <button id="editPadBtn">🎮 コントローラー配置</button>
   </div>
 
   <div id="overScreen" class="screen hidden">
@@ -155,6 +190,7 @@
     <div id="recordBadge" class="record hidden">★ ハイスコア更新！ ★</div>
     <div class="best">ハイスコア &nbsp;<span id="bestOver">0</span> &nbsp;pts</div>
     <button class="btn" id="retryBtn">もう一度</button>
+    <button id="toTopBtn">トップへ戻る</button>
   </div>
 </div>
 
@@ -529,24 +565,79 @@ function myRule(api) {
   const btnR = document.getElementById("btnR");
   const btnJ = document.getElementById("btnJ");
   const btnT = document.getElementById("btnT");
-  function holdButton(el, key) {
-    const down = e => { e.preventDefault(); unlockAudio(); input[key] = true; el.classList.add("pressed"); };
-    const up = e => { e.preventDefault(); input[key] = false; el.classList.remove("pressed"); };
+
+  // --- コントローラー配置（中心座標を画面比率で保存。ドラッグで変更可能） ---
+  const LAYOUT_KEY = "tenaPadLayout";
+  // x,y は 0〜1 の画面比率（中心位置）。左右ボタンは初期から少し離してある。
+  const DEFAULT_LAYOUT = { L: { x: 0.11, y: 0.87 }, R: { x: 0.42, y: 0.87 }, J: { x: 0.86, y: 0.83 }, T: { x: 0.66, y: 0.77 } };
+  const padEls = { L: btnL, R: btnR, J: btnJ, T: btnT };
+  let padLayout = loadLayout();
+  function loadLayout() {
+    try { const s = JSON.parse(localStorage.getItem(LAYOUT_KEY)); if (s && s.L && s.R && s.J && s.T) return s; } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  }
+  function saveLayout() { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(padLayout)); } catch (e) {} }
+  function applyLayout() {
+    for (const k in padEls) {
+      const el = padEls[k], p = padLayout[k];
+      el.style.left = (p.x * 100) + "vw"; el.style.top = (p.y * 100) + "vh";
+      el.style.right = "auto"; el.style.bottom = "auto";
+    }
+  }
+  applyLayout();
+
+  // 配置カスタム（編集モード）
+  let editingPad = false, dragKey = null;
+  const controls = document.getElementById("controls");
+  const editBar = document.getElementById("editBar");
+  function beginDrag(key, e) { e.preventDefault(); dragKey = key; }
+  function moveDrag(e) {
+    if (!editingPad || !dragKey) return;
+    e.preventDefault();
+    padLayout[dragKey] = { x: clamp(e.clientX / window.innerWidth, 0.06, 0.94), y: clamp(e.clientY / window.innerHeight, 0.10, 0.95) };
+    applyLayout();
+  }
+  function endDrag() { dragKey = null; }
+  window.addEventListener("pointermove", moveDrag, { passive: false });
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+  function enterEditPad() {
+    editingPad = true;
+    startScreen.classList.add("hidden");
+    controls.classList.remove("hidden"); controls.classList.add("editing");
+    editBar.classList.remove("hidden");
+  }
+  function exitEditPad(save) {
+    editingPad = false;
+    controls.classList.remove("editing"); controls.classList.add("hidden");
+    editBar.classList.add("hidden");
+    startScreen.classList.remove("hidden");
+    if (save) saveLayout(); else applyLayout();
+  }
+
+  function holdButton(el, key, layoutKey) {
+    const down = e => { if (editingPad) { beginDrag(layoutKey, e); return; } e.preventDefault(); unlockAudio(); input[key] = true; el.classList.add("pressed"); };
+    const up = e => { if (editingPad) return; e.preventDefault(); input[key] = false; el.classList.remove("pressed"); };
     el.addEventListener("pointerdown", down);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
     el.addEventListener("pointerleave", up);
   }
-  holdButton(btnL, "left");
-  holdButton(btnR, "right");
-  btnJ.addEventListener("pointerdown", e => { e.preventDefault(); unlockAudio(); btnJ.classList.add("pressed"); if (state === "playing") jump(); });
-  const jUp = () => { btnJ.classList.remove("pressed"); jumpCut(); };
+  holdButton(btnL, "left", "L");
+  holdButton(btnR, "right", "R");
+  btnJ.addEventListener("pointerdown", e => { if (editingPad) { beginDrag("J", e); return; } e.preventDefault(); unlockAudio(); btnJ.classList.add("pressed"); if (state === "playing") jump(); });
+  const jUp = () => { if (editingPad) return; btnJ.classList.remove("pressed"); jumpCut(); };
   btnJ.addEventListener("pointerup", jUp);
   btnJ.addEventListener("pointercancel", jUp);
-  btnT.addEventListener("pointerdown", e => { e.preventDefault(); unlockAudio(); btnT.classList.add("pressed"); throwShuriken(); });
-  const tUp = () => btnT.classList.remove("pressed");
+  btnT.addEventListener("pointerdown", e => { if (editingPad) { beginDrag("T", e); return; } e.preventDefault(); unlockAudio(); btnT.classList.add("pressed"); throwShuriken(); });
+  const tUp = () => { if (editingPad) return; btnT.classList.remove("pressed"); };
   btnT.addEventListener("pointerup", tUp);
   btnT.addEventListener("pointercancel", tUp);
+
+  document.getElementById("editPadBtn").addEventListener("click", enterEditPad);
+  document.getElementById("editDone").addEventListener("click", () => exitEditPad(true));
+  document.getElementById("editReset").addEventListener("click", () => { padLayout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT)); applyLayout(); });
+
   // 画面のスクロール/ズームを止める（ボタン以外をタップしたとき）
   document.body.addEventListener("touchstart", e => { if (e.target.tagName !== "BUTTON") e.preventDefault(); }, { passive: false });
 
@@ -578,7 +669,6 @@ function myRule(api) {
     });
   });
 
-  const controls = document.getElementById("controls");
   function startGame() {
     initAudio();
     if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
@@ -604,6 +694,13 @@ function myRule(api) {
   }
   document.getElementById("startBtn").addEventListener("click", startGame);
   document.getElementById("retryBtn").addEventListener("click", startGame);
+  function goToTop() {
+    state = "ready";
+    overScreen.classList.add("hidden"); hud.classList.add("hidden"); controls.classList.add("hidden");
+    startScreen.classList.remove("hidden");
+    showSettings();
+  }
+  document.getElementById("toTopBtn").addEventListener("click", goToTop);
 
   // ---------- particles ----------
   function spawnPuff(x, y, n, up) {
